@@ -1,0 +1,25 @@
+
+> elega-front@0.1.0 dev
+> next dev -H 0.0.0.0 -p 3000
+
+  ▲ Next.js 14.2.35
+  - Local:        http://localhost:3000
+  - Network:      http://0.0.0.0:3000
+  - Environments: .env.local, .env
+
+ ✓ Starting...
+ ✓ Ready in 3.5s
+ ○ Compiling /admin/users ...
+ ✓ Compiled /admin/users in 2.6s (559 modules)
+ GET /account 200 in 3082ms
+ GET /admin/users 200 in 2985ms
+ ○ Compiling /shop ...
+ ✓ Compiled /shop in 1473ms (593 modules)
+ ○ Compiling / ...
+ ✓ Compiled / in 555ms (603 modules)
+ ✓ Compiled /account in 100ms (302 modules)
+ ✓ Compiled /admin in 272ms (619 modules)
+ ✓ Compiled /admin/users in 151ms (321 modules)
+ ○ Compiling /staff/men ...
+ ✓ Compiled /staff/men in 577ms (627 modules)
+ ✓ Compiled /staff/women in 251ms (609 modules)

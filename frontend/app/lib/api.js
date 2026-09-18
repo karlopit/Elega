@@ -1,0 +1,234 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
+
+function formatApiDetail(detail) {
+  if (!detail) {
+    return "";
+  }
+
+  if (typeof detail === "string") {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") {
+          return item;
+        }
+
+        if (item?.msg) {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
+          return field ? `${field}: ${item.msg}` : item.msg;
+        }
+
+        return "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  if (typeof detail === "object" && detail.msg) {
+    return detail.msg;
+  }
+
+  return "";
+}
+
+export function getApiErrorMessage(error, fallback = "Something went wrong. Please try again.") {
+  return formatApiDetail(error?.details?.detail) || error?.message || fallback;
+}
+
+function getApiUrl() {
+  if (!API_URL) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+  }
+
+  if (!API_URL.startsWith("https://") && !API_URL.includes("localhost")) {
+    throw new Error("NEXT_PUBLIC_API_URL must use HTTPS outside local development.");
+  }
+
+  return API_URL.replace(/\/$/, "");
+}
+
+async function request(path, options = {}) {
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
+    ...options.headers
+  };
+
+  const response = await fetch(`${getApiUrl()}${path}`, {
+    method: options.method || "GET",
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined,
+    cache: options.cache || "no-store"
+  });
+
+  if (response.status === 204) {
+    return null;
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const fallbackMessage =
+      response.status === 429
+        ? "Too many requests. Please pause for a moment and try again."
+        : "Something went wrong. Please try again.";
+    const message = formatApiDetail(data?.detail) || fallbackMessage;
+    const error = new Error(message);
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
+  return data;
+}
+
+export function listProducts(includeInactive = false) {
+  return request(`/products${includeInactive ? "?include_inactive=true" : ""}`);
+}
+
+export function getBootstrapStatus() {
+  return request("/auth/bootstrap-status");
+}
+
+export function bootstrapAdmin(payload) {
+  return request("/auth/bootstrap-admin", {
+    method: "POST",
+    body: payload
+  });
+}
+
+export function loginUser(payload) {
+  return request("/auth/login", {
+    method: "POST",
+    body: payload
+  });
+}
+
+export function registerUser(payload) {
+  return request("/auth/register", {
+    method: "POST",
+    body: payload
+  });
+}
+
+export function getCart(userId, token) {
+  return request(`/cart/${userId}`, { token });
+}
+
+export function upsertCartItem(userId, token, payload) {
+  return request(`/cart/${userId}/items`, {
+    method: "POST",
+    token,
+    body: payload
+  });
+}
+
+export function removeCartItem(userId, token, productId) {
+  return request(`/cart/${userId}/items/${productId}`, {
+    method: "DELETE",
+    token
+  });
+}
+
+export function listOrders(userId, token) {
+  return request(`/orders/${userId}`, { token });
+}
+
+export function createOrder(token, payload) {
+  return request("/orders", {
+    method: "POST",
+    token,
+    body: payload
+  });
+}
+
+export function createProduct(token, payload) {
+  return request("/products", {
+    method: "POST",
+    token,
+    body: payload
+  });
+}
+
+export function updateProduct(productId, token, payload) {
+  return request(`/products/${productId}`, {
+    method: "PATCH",
+    token,
+    body: payload
+  });
+}
+
+export function deleteProduct(productId, token) {
+  return request(`/products/${productId}`, {
+    method: "DELETE",
+    token
+  });
+}
+
+export async function uploadProductImage(file, token) {
+  const API_URL = process.env.NEXT_PUBLIC_API_URL;
+  if (!API_URL) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+  }
+  const cleanApiUrl = API_URL.replace(/\/$/, "");
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${cleanApiUrl}/products/upload-image`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: formData
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.detail || "Failed to upload image.");
+  }
+
+  return response.json();
+}
+
+export function listUsers(token) {
+  return request("/users", { token });
+}
+
+export function createUser(token, payload) {
+  return request("/users", {
+    method: "POST",
+    token,
+    body: payload
+  });
+}
+
+export function updateUser(userId, token, payload) {
+  return request(`/users/${userId}`, {
+    method: "PATCH",
+    token,
+    body: payload
+  });
+}
+
+export function updateUserRole(userId, token, role) {
+  return request(`/users/${userId}/role`, {
+    method: "PATCH",
+    token,
+    body: { role }
+  });
+}
+
+export function getAdminDashboard(token) {
+  return request("/admin/dashboard", { token });
+}
+
+export function listStaffHistory(token) {
+  return request("/admin/history/staff", { token });
+}
+
+export function listUserHistory(token) {
+  return request("/admin/history/users", { token });
+}
