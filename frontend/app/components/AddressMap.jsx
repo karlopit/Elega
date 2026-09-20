@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Map, Marker, NavigationControl } from "maplibre-gl";
+import maplibregl from "maplibre-gl";
 
 const DEFAULT_CENTER = [120.9842, 14.5995];
 
@@ -19,17 +19,22 @@ export function AddressMap({ coordinates, onPinSettled, onLocationError }) {
     const initialCenter = coordinates
       ? [coordinates.longitude, coordinates.latitude]
       : DEFAULT_CENTER;
-    const map = new Map({
+    const map = new maplibregl.Map({
       container: containerRef.current,
       style: "https://tiles.openfreemap.org/styles/liberty",
       center: initialCenter,
       zoom: coordinates ? 15 : 11,
       attributionControl: true
     });
-    map.addControl(new NavigationControl(), "top-right");
-    const marker = new Marker({ color: "#C9A24B", draggable: true })
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    const marker = new maplibregl.Marker({ color: "#C9A24B", draggable: true })
       .setLngLat(initialCenter)
       .addTo(map);
+
+    map.on("error", (event) => {
+      console.error("OpenFreeMap failed to load a map resource.", event.error);
+      onLocationError("The map tiles could not be loaded. You can still type the address and use the pin.");
+    });
 
     function settlePin(lngLat) {
       const nextCoordinates = { latitude: lngLat.lat, longitude: lngLat.lng };
@@ -50,7 +55,7 @@ export function AddressMap({ coordinates, onPinSettled, onLocationError }) {
       mapRef.current = null;
       markerRef.current = null;
     };
-  }, [coordinates, onPinSettled]);
+  }, [coordinates, onLocationError, onPinSettled]);
 
   useEffect(() => {
     if (!mapRef.current || !markerRef.current || !coordinates) {

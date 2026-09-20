@@ -29,6 +29,12 @@ class UserLoginRequest(BaseModel):
     password: str = Field(min_length=8, max_length=128)
 
 
+class AuthRefreshRequest(BaseModel):
+    """Request body for exchanging a refresh token for a current session."""
+
+    refresh_token: str = Field(min_length=1, max_length=2048)
+
+
 class BootstrapStatusResponse(BaseModel):
     """Response showing whether the first admin setup is still available."""
 

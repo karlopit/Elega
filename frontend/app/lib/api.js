@@ -126,6 +126,14 @@ export function loginUser(payload) {
   });
 }
 
+export function refreshSession(refreshToken) {
+  return request("/auth/refresh", {
+    method: "POST",
+    body: { refresh_token: refreshToken },
+    showLoading: false
+  });
+}
+
 export function registerUser(payload) {
   return request("/auth/register", {
     method: "POST",

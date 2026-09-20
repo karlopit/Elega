@@ -7,6 +7,7 @@ import {
   getApiErrorMessage,
   getCart,
   loginUser,
+  refreshSession,
   registerUser,
   removeCartItem,
   upsertCartItem
@@ -39,11 +40,36 @@ export function StoreProvider({ children }) {
   const cartSyncRef = useRef(new Map());
 
   useEffect(() => {
-    setAuth(readStoredJson(AUTH_STORAGE_KEY, null));
     const storedGuestCart = readStoredJson(GUEST_CART_KEY, []);
     cartSnapshotRef.current = storedGuestCart;
     setGuestCart(storedGuestCart);
-    setAuthReady(true);
+    const storedAuth = readStoredJson(AUTH_STORAGE_KEY, null);
+
+    async function restoreSession() {
+      if (!storedAuth?.refresh_token) {
+        setAuth(storedAuth);
+        setAuthReady(true);
+        return;
+      }
+
+      try {
+        const refreshedAuth = await refreshSession(storedAuth.refresh_token);
+        const nextAuth = {
+          ...refreshedAuth,
+          refresh_token: refreshedAuth.refresh_token || storedAuth.refresh_token
+        };
+        setAuth(nextAuth);
+        window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
+      } catch (error) {
+        console.error(error);
+        window.localStorage.removeItem(AUTH_STORAGE_KEY);
+        setAuth(null);
+      } finally {
+        setAuthReady(true);
+      }
+    }
+
+    restoreSession();
   }, []);
 
   useEffect(() => {
@@ -202,6 +228,21 @@ export function StoreProvider({ children }) {
     await refreshCart();
   }
 
+  async function renewAuthSession(currentAuth = auth) {
+    if (!currentAuth?.refresh_token) {
+      throw new Error("Your session has expired. Please sign in again.");
+    }
+
+    const refreshedAuth = await refreshSession(currentAuth.refresh_token);
+    const nextAuth = {
+      ...refreshedAuth,
+      refresh_token: refreshedAuth.refresh_token || currentAuth.refresh_token
+    };
+    setAuth(nextAuth);
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextAuth));
+    return nextAuth;
+  }
+
   async function placeOrder(items, shippingAddress, paymentOption = "cash", coordinates = null) {
     if (!auth) {
       throw new Error("Please sign in before checkout.");
@@ -215,7 +256,7 @@ export function StoreProvider({ children }) {
       throw new Error("Please enter a complete shipping address.");
     }
 
-    const order = await createOrder(auth.access_token, {
+    const orderPayload = {
       user_id: auth.user_id,
       shipping_address: shippingAddress,
       payment_option: paymentOption,
@@ -225,9 +266,27 @@ export function StoreProvider({ children }) {
         product_id: item.product_id,
         quantity: item.quantity
       }))
-    });
+    };
 
-    await refreshCart();
+    let session = auth;
+    let order;
+    try {
+      order = await createOrder(session.access_token, orderPayload);
+    } catch (error) {
+      if (error.status !== 401 || !session.refresh_token) {
+        throw error;
+      }
+      session = await renewAuthSession(session);
+      order = await createOrder(session.access_token, orderPayload);
+    }
+
+    try {
+      await refreshCart(session);
+    } catch (refreshError) {
+      console.error(refreshError);
+      cartSnapshotRef.current = [];
+      setRemoteCart([]);
+    }
     setStatus({ type: "success", message: "Order placed successfully." });
     return order;
   }

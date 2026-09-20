@@ -7,6 +7,7 @@ import logging
 from db.database import get_supabase_admin_client, get_supabase_client
 from models.schemas import (
     AuthResponse,
+    AuthRefreshRequest,
     BootstrapAdminRequest,
     BootstrapStatusResponse,
     UserLoginRequest,
@@ -203,6 +204,24 @@ async def login_user(request: Request, payload: UserLoginRequest) -> AuthRespons
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=detail,
+        ) from None
+
+    return _build_auth_response(auth_data)
+
+
+@router.post("/refresh", response_model=AuthResponse)
+@limiter.limit("20/minute")
+async def refresh_session(request: Request, payload: AuthRefreshRequest) -> AuthResponse:
+    """Exchange a refresh token for a new access-token session."""
+    supabase = get_supabase_client()
+
+    try:
+        auth_data = supabase.auth.refresh_session(payload.refresh_token)
+    except AuthApiError as exc:
+        logger.warning("Supabase session refresh failed: %s", repr(exc))
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Your session has expired. Please sign in again.",
         ) from None
 
     return _build_auth_response(auth_data)
