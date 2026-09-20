@@ -95,20 +95,18 @@ async def create_order(
             }
         )
 
-    order_response = (
-        supabase.table("orders")
-        .insert(
-            {
-                "user_id": str(payload.user_id),
-                "status": OrderStatus.pending.value,
-                "total_amount": str(total_amount),
-                "currency": currency,
-                "shipping_address": payload.shipping_address,
-                "payment_option": payload.payment_option.value,
-            }
-        )
-        .execute()
-    )
+    order_payload = {
+        "user_id": str(payload.user_id),
+        "status": OrderStatus.pending.value,
+        "total_amount": str(total_amount),
+        "currency": currency,
+        "shipping_address": payload.shipping_address,
+        "payment_option": payload.payment_option.value,
+    }
+    if payload.latitude is not None and payload.longitude is not None:
+        order_payload.update({"latitude": payload.latitude, "longitude": payload.longitude})
+
+    order_response = supabase.table("orders").insert(order_payload).execute()
 
     if not order_response.data:
         raise HTTPException(

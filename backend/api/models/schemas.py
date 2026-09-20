@@ -199,8 +199,19 @@ class OrderCreateRequest(BaseModel):
 
     user_id: UUID
     items: list[OrderItemRequest] = Field(min_length=1)
-    shipping_address: str = Field(min_length=10, max_length=500)
+    shipping_address: str = Field(min_length=1, max_length=500)
     payment_option: PaymentOption
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+    @field_validator("shipping_address")
+    @classmethod
+    def validate_shipping_address(cls, value: str) -> str:
+        """Reject whitespace-only addresses and normalize surrounding spaces."""
+        normalized = value.strip()
+        if len(normalized) < 10:
+            raise ValueError("Please enter a complete shipping address.")
+        return normalized
 
     @model_validator(mode="after")
     def validate_unique_products(self) -> "OrderCreateRequest":
@@ -208,6 +219,8 @@ class OrderCreateRequest(BaseModel):
         product_ids = [item.product_id for item in self.items]
         if len(product_ids) != len(set(product_ids)):
             raise ValueError("Each product can only appear once per order.")
+        if (self.latitude is None) != (self.longitude is None):
+            raise ValueError("Latitude and longitude must be provided together.")
         return self
 
 
@@ -221,6 +234,8 @@ class OrderResponse(BaseModel):
     currency: str = Field(min_length=3, max_length=3)
     shipping_address: str
     payment_option: PaymentOption | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

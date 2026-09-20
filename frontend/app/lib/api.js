@@ -50,39 +50,56 @@ function getApiUrl() {
   return API_URL.replace(/\/$/, "");
 }
 
+function emitLoadingEvent(type) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(`elega:loading-${type}`));
+  }
+}
+
 async function request(path, options = {}) {
+  const showLoading = options.showLoading === true;
+  if (showLoading) {
+    emitLoadingEvent("start");
+  }
+
   const headers = {
     "Content-Type": "application/json",
     ...(options.token ? { Authorization: `Bearer ${options.token}` } : {}),
     ...options.headers
   };
 
-  const response = await fetch(`${getApiUrl()}${path}`, {
-    method: options.method || "GET",
-    headers,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-    cache: options.cache || "no-store"
-  });
+  try {
+    const response = await fetch(`${getApiUrl()}${path}`, {
+      method: options.method || "GET",
+      headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+      cache: options.cache || "no-store"
+    });
 
-  if (response.status === 204) {
-    return null;
+    if (response.status === 204) {
+      return null;
+    }
+
+    const data = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      const fallbackMessage =
+        response.status === 429
+          ? "Too many requests. Please pause for a moment and try again."
+          : "Something went wrong. Please try again.";
+      const message = formatApiDetail(data?.detail) || fallbackMessage;
+      const error = new Error(message);
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
+
+    return data;
+  } finally {
+    if (showLoading) {
+      emitLoadingEvent("end");
+    }
   }
-
-  const data = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const fallbackMessage =
-      response.status === 429
-        ? "Too many requests. Please pause for a moment and try again."
-        : "Something went wrong. Please try again.";
-    const message = formatApiDetail(data?.detail) || fallbackMessage;
-    const error = new Error(message);
-    error.status = response.status;
-    error.details = data;
-    throw error;
-  }
-
-  return data;
 }
 
 export function listProducts(includeInactive = false) {
@@ -96,21 +113,24 @@ export function getBootstrapStatus() {
 export function bootstrapAdmin(payload) {
   return request("/auth/bootstrap-admin", {
     method: "POST",
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
 export function loginUser(payload) {
   return request("/auth/login", {
     method: "POST",
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
 export function registerUser(payload) {
   return request("/auth/register", {
     method: "POST",
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
@@ -122,14 +142,16 @@ export function upsertCartItem(userId, token, payload) {
   return request(`/cart/${userId}/items`, {
     method: "POST",
     token,
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
 export function removeCartItem(userId, token, productId) {
   return request(`/cart/${userId}/items/${productId}`, {
     method: "DELETE",
-    token
+    token,
+    showLoading: true
   });
 }
 
@@ -141,7 +163,8 @@ export function createOrder(token, payload) {
   return request("/orders", {
     method: "POST",
     token,
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
@@ -149,7 +172,8 @@ export function createProduct(token, payload) {
   return request("/products", {
     method: "POST",
     token,
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
@@ -157,14 +181,16 @@ export function updateProduct(productId, token, payload) {
   return request(`/products/${productId}`, {
     method: "PATCH",
     token,
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
 export function deleteProduct(productId, token) {
   return request(`/products/${productId}`, {
     method: "DELETE",
-    token
+    token,
+    showLoading: true
   });
 }
 
@@ -176,21 +202,28 @@ export async function uploadProductImage(file, token) {
   const cleanApiUrl = API_URL.replace(/\/$/, "");
   const formData = new FormData();
   formData.append("file", file);
+  emitLoadingEvent("start");
+  try {
+    const response = await fetch(`${cleanApiUrl}/products/upload-image`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    });
 
-  const response = await fetch(`${cleanApiUrl}/products/upload-image`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    body: formData
-  });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      const error = new Error(formatApiDetail(data?.detail) || "Failed to upload image.");
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
 
-  if (!response.ok) {
-    const data = await response.json().catch(() => null);
-    throw new Error(data?.detail || "Failed to upload image.");
+    return response.json();
+  } finally {
+    emitLoadingEvent("end");
   }
-
-  return response.json();
 }
 
 export function getPaymentQr() {
@@ -205,30 +238,36 @@ export async function uploadPaymentQr(file, token) {
 
   const formData = new FormData();
   formData.append("file", file);
-  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/admin/payment-qr`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`
-    },
-    body: formData,
-    cache: "no-store"
-  });
+  emitLoadingEvent("start");
+  try {
+    const response = await fetch(`${apiUrl.replace(/\/$/, "")}/admin/payment-qr`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData,
+      cache: "no-store"
+    });
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = new Error(formatApiDetail(data?.detail) || "Unable to upload the payment QR code.");
-    error.status = response.status;
-    error.details = data;
-    throw error;
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error(formatApiDetail(data?.detail) || "Unable to upload the payment QR code.");
+      error.status = response.status;
+      error.details = data;
+      throw error;
+    }
+
+    return data;
+  } finally {
+    emitLoadingEvent("end");
   }
-
-  return data;
 }
 
 export async function deletePaymentQr(token) {
   return request("/admin/payment-qr", {
     method: "DELETE",
-    token
+    token,
+    showLoading: true
   });
 }
 
@@ -240,7 +279,8 @@ export function createUser(token, payload) {
   return request("/users", {
     method: "POST",
     token,
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
@@ -248,7 +288,8 @@ export function updateUser(userId, token, payload) {
   return request(`/users/${userId}`, {
     method: "PATCH",
     token,
-    body: payload
+    body: payload,
+    showLoading: true
   });
 }
 
@@ -256,8 +297,26 @@ export function updateUserRole(userId, token, role) {
   return request(`/users/${userId}/role`, {
     method: "PATCH",
     token,
-    body: { role }
+    body: { role },
+    showLoading: true
   });
+}
+
+export async function reverseGeocode(latitude, longitude) {
+  const query = new URLSearchParams({
+    format: "jsonv2",
+    lat: String(latitude),
+    lon: String(longitude),
+    zoom: "18"
+  });
+  const response = await fetch(`https://nominatim.openstreetmap.org/reverse?${query}`, {
+    headers: { Accept: "application/json" },
+    cache: "no-store"
+  });
+  if (!response.ok) {
+    throw new Error("We could not look up that location. Please type your address.");
+  }
+  return response.json();
 }
 
 export function getAdminDashboard(token) {

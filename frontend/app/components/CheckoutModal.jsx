@@ -1,10 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import Link from "next/link";
 import { X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
-import { getApiErrorMessage, getPaymentQr } from "@/lib/api";
+import { getApiErrorMessage, getPaymentQr, reverseGeocode } from "@/lib/api";
 import { ActionButton } from "@/components/ActionButton";
+
+const AddressMap = dynamic(() => import("@/components/AddressMap").then((module) => module.AddressMap), {
+  ssr: false,
+  loading: () => <div className="mt-5 h-64 animate-pulse rounded-sm border border-line bg-ivory" />
+});
 
 export function CheckoutModal({ items, open, onClose }) {
   const { auth, placeOrder, signIn } = useStore();
@@ -12,24 +19,31 @@ export function CheckoutModal({ items, open, onClose }) {
   const [loginError, setLoginError] = useState("");
   const [loginPending, setLoginPending] = useState(false);
   const [address, setAddress] = useState("");
-  const [paymentOption, setPaymentOption] = useState("cash");
+  const [paymentOption, setPaymentOption] = useState("");
   const [message, setMessage] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({ address: false, payment: false });
   const [saving, setSaving] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [qrUrl, setQrUrl] = useState(null);
   const [qrError, setQrError] = useState("");
   const [qrLoading, setQrLoading] = useState(false);
+  const [coordinates, setCoordinates] = useState(null);
+  const [mapMessage, setMapMessage] = useState("");
+  const reverseTimer = useRef(null);
 
   useEffect(() => {
     if (!open) {
       setAddress("");
-      setPaymentOption("cash");
+      setPaymentOption("");
       setMessage("");
+      setFieldErrors({ address: false, payment: false });
       setConfirmed(false);
       setQrUrl(null);
       setQrError("");
       setLoginForm({ email: "", password: "" });
       setLoginError("");
+      setCoordinates(null);
+      setMapMessage("");
       return;
     }
 
@@ -68,9 +82,7 @@ export function CheckoutModal({ items, open, onClose }) {
     };
   }, [open, paymentOption]);
 
-  if (!open) {
-    return null;
-  }
+  useEffect(() => () => window.clearTimeout(reverseTimer.current), []);
 
   async function handleSignIn(event) {
     event.preventDefault();
@@ -100,8 +112,18 @@ export function CheckoutModal({ items, open, onClose }) {
       return;
     }
 
-    if (address.trim().length < 10) {
-      setMessage("Enter a complete address.");
+    const missingAddress = !address.trim();
+    const shortAddress = address.trim().length > 0 && address.trim().length < 10;
+    const missingPayment = !paymentOption;
+    if (missingAddress || missingPayment || shortAddress) {
+      setFieldErrors({ address: missingAddress || shortAddress, payment: missingPayment });
+      setMessage(
+        missingAddress && missingPayment
+          ? "Please enter your address and choose a payment option to continue."
+          : missingAddress || shortAddress
+            ? "Please enter a complete address to continue."
+            : "Please choose a payment option to continue."
+      );
       return;
     }
 
@@ -111,7 +133,7 @@ export function CheckoutModal({ items, open, onClose }) {
         product_id: item.product_id,
         quantity: item.quantity
       }));
-      await placeOrder(orderItems, address, paymentOption);
+      await placeOrder(orderItems, address, paymentOption, coordinates);
       setConfirmed(true);
     } catch (error) {
       console.error(error);
@@ -121,10 +143,50 @@ export function CheckoutModal({ items, open, onClose }) {
     }
   }
 
+  function handleAddressChange(event) {
+    setAddress(event.target.value);
+    if (event.target.value.trim()) {
+      setFieldErrors((current) => ({ ...current, address: false }));
+      setMessage("");
+    }
+  }
+
+  function handlePaymentChange(event) {
+    setPaymentOption(event.target.value);
+    if (event.target.value) {
+      setFieldErrors((current) => ({ ...current, payment: false }));
+      setMessage("");
+    }
+  }
+
+  const handlePinSettled = useCallback((nextCoordinates) => {
+    setCoordinates(nextCoordinates);
+    setMapMessage("Looking up the address from your pin…");
+    window.clearTimeout(reverseTimer.current);
+    reverseTimer.current = window.setTimeout(async () => {
+      try {
+        const result = await reverseGeocode(nextCoordinates.latitude, nextCoordinates.longitude);
+        if (result.display_name) {
+          setAddress(result.display_name);
+          setFieldErrors((current) => ({ ...current, address: false }));
+          setMessage("");
+        }
+        setMapMessage(result.display_name ? "Address filled from the pin. You can edit it." : "Type the address manually if the lookup is incomplete.");
+      } catch (error) {
+        console.error(error);
+        setMapMessage("We could not look up the address. Please type it manually; the pin will still be saved.");
+      }
+    }, 450);
+  }, []);
+
+  if (!open) {
+    return null;
+  }
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 px-5 backdrop-blur-sm">
       <form
-        className="w-full max-w-md border border-line bg-paper p-6 shadow-soft"
+        className="max-h-[90vh] w-full max-w-md overflow-y-auto border border-line bg-paper p-6 shadow-soft"
         onSubmit={auth ? handleConfirm : handleSignIn}
       >
         <div className="flex items-start justify-between gap-4 border-b border-line pb-5">
@@ -175,7 +237,7 @@ export function CheckoutModal({ items, open, onClose }) {
                  Cancel
                </button>
                <ActionButton
-                 className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold disabled:opacity-50"
+                 className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold"
                  pending={loginPending}
                  type="submit"
                >
@@ -185,34 +247,38 @@ export function CheckoutModal({ items, open, onClose }) {
            </>
          ) : confirmed ? (
            <div className="mt-8 border border-gold bg-ivory px-5 py-6">
-             <p className="font-display text-3xl font-semibold text-ink">Order confirmed.</p>
+             <p className="font-display text-3xl font-semibold text-ink">Order placed successfully</p>
              <p className="mt-3 text-sm leading-6 text-muted">Thank you. Your order has been placed and your cart is up to date.</p>
-             <button
-               className="focus-ring mt-6 border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold"
-               onClick={onClose}
-               type="button"
-             >
-               Continue
-             </button>
+             <Link className="focus-ring mt-6 inline-flex border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold" href="/shop" onClick={onClose}>
+               Back to shop
+             </Link>
            </div>
          ) : (
            <>
              <label className="mt-6 block text-sm font-medium text-ink">
                Address
                <textarea
-                 className="focus-ring mt-2 min-h-28 w-full resize-none border border-line bg-ivory px-4 py-3 text-sm text-ink"
-                 onChange={(event) => setAddress(event.target.value)}
+                 className={`focus-ring mt-2 min-h-28 w-full resize-none border bg-ivory px-4 py-3 text-sm text-ink ${fieldErrors.address ? "border-red-300" : "border-line"}`}
+                 onChange={handleAddressChange}
                  value={address}
                />
              </label>
 
+             <AddressMap
+               coordinates={coordinates}
+               onLocationError={setMapMessage}
+               onPinSettled={handlePinSettled}
+             />
+             {mapMessage ? <p className="mt-2 text-xs leading-5 text-muted">{mapMessage}</p> : null}
+
              <label className="mt-5 block text-sm font-medium text-ink">
                Payment option
                <select
-                 className="focus-ring mt-2 w-full border border-line bg-ivory px-4 py-3 text-sm uppercase tracking-[0.12em] text-ink"
-                 onChange={(event) => setPaymentOption(event.target.value)}
+                 className={`focus-ring mt-2 w-full border bg-ivory px-4 py-3 text-sm uppercase tracking-[0.12em] text-ink ${fieldErrors.payment ? "border-red-300" : "border-line"}`}
+                 onChange={handlePaymentChange}
                  value={paymentOption}
                >
+                 <option value="">Choose payment method</option>
                  <option value="cash">Cash</option>
                  <option value="gcash">GCash</option>
                </select>
@@ -244,7 +310,7 @@ export function CheckoutModal({ items, open, onClose }) {
                  Cancel
                </button>
                <ActionButton
-                 className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold disabled:opacity-50"
+                 className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold"
                  pending={saving}
                  type="submit"
                >

@@ -9,11 +9,15 @@ export function PageTransition({ children }) {
 
   useEffect(() => {
     setTransitionKey((current) => current + 1);
+    window.dispatchEvent(new CustomEvent("elega:loading-start"));
+    const timer = window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("elega:loading-end"));
+    }, 350);
+    return () => window.clearTimeout(timer);
   }, [pathname]);
 
   return (
     <>
-      {transitionKey > 0 ? <div aria-hidden="true" className="route-progress" key={transitionKey} /> : null}
       <div className="page-transition" key={`${pathname}-${transitionKey}`}>
         {children}
       </div>

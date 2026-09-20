@@ -6,7 +6,6 @@ import { useStore } from "@/context/StoreContext";
 import { createUser, getApiErrorMessage, listUsers, updateUser, updateUserRole } from "@/lib/api";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { ActionButton } from "@/components/ActionButton";
-import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { Check, Edit3, Plus, Power } from "lucide-react";
 
 const ROLES = ["user", "staff", "admin"];
@@ -17,7 +16,6 @@ export default function UsersDashboard() {
   const currentUserId = auth?.user_id;
 
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [statusMsg, setStatusMsg] = useState("");
   const [savingId, setSavingId] = useState(null);
@@ -44,15 +42,12 @@ export default function UsersDashboard() {
       return; // Access denied UI will render
     }
     async function loadUsers() {
-      setLoading(true);
       try {
         const data = await listUsers(auth.access_token);
         setUsers(data);
       } catch (err) {
         console.error(err);
         setError("Failed to fetch users.");
-      } finally {
-        setLoading(false);
       }
     }
 
@@ -172,18 +167,6 @@ export default function UsersDashboard() {
           >
             Return to Store
           </button>
-        </div>
-      </main>
-    );
-  }
-
-  if (loading && users.length === 0) {
-    return (
-      <main className="bg-paper px-5 py-24">
-        <div className="mx-auto max-w-6xl">
-          <SkeletonBlock className="h-3 w-28" />
-          <SkeletonBlock className="mt-5 h-14 w-80 max-w-full" />
-          <SkeletonBlock className="mt-10 h-96 w-full" />
         </div>
       </main>
     );

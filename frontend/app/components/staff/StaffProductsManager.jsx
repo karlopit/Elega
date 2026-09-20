@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Edit3, Plus, Upload, X } from "lucide-react";
 import { StaffSidebar } from "@/components/staff/StaffSidebar";
 import { ActionButton } from "@/components/ActionButton";
-import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { useStore } from "@/context/StoreContext";
 import { createProduct, getApiErrorMessage, listProducts, updateProduct, uploadProductImage } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -33,7 +32,6 @@ export function StaffProductsManager({ section }) {
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [disablingId, setDisablingId] = useState(null);
-  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!authReady) {
@@ -51,12 +49,12 @@ export function StaffProductsManager({ section }) {
   }, [auth, authReady, router, section]);
 
   async function refreshProducts() {
-    setLoading(true);
     try {
       const data = await listProducts(true);
       setProducts(data);
-    } finally {
-      setLoading(false);
+    } catch (refreshError) {
+      console.error(refreshError);
+      setError(getApiErrorMessage(refreshError, "Unable to load products."));
     }
   }
 
@@ -177,13 +175,8 @@ export function StaffProductsManager({ section }) {
           {message ? <p className="mt-6 border border-gold bg-ivory px-4 py-3 text-sm text-ink">{message}</p> : null}
           {error ? <p className="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-          {loading ? (
-            <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-              {[0, 1, 2].map((item) => <SkeletonBlock className="aspect-[4/5] w-full" key={item} />)}
-            </div>
-          ) : (
           <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-            {sectionProducts.map((product) => (
+            {sectionProducts.length > 0 ? sectionProducts.map((product) => (
               <article className="border-b border-line pb-6" key={product.id}>
                 <div className="relative aspect-[4/5] bg-ivory">
                   <Image
@@ -224,9 +217,12 @@ export function StaffProductsManager({ section }) {
                   </ActionButton>
                 </div>
               </article>
-            ))}
+            )) : (
+              <p className="col-span-full border border-line bg-ivory px-6 py-12 text-center font-display text-2xl text-muted">
+                No {section.toLowerCase()} pieces yet. Add the first one to begin the collection.
+              </p>
+            )}
           </div>
-          )}
         </div>
       </section>
 

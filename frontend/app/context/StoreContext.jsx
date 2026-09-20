@@ -202,7 +202,7 @@ export function StoreProvider({ children }) {
     await refreshCart();
   }
 
-  async function placeOrder(items, shippingAddress, paymentOption = "cash") {
+  async function placeOrder(items, shippingAddress, paymentOption = "cash", coordinates = null) {
     if (!auth) {
       throw new Error("Please sign in before checkout.");
     }
@@ -219,6 +219,8 @@ export function StoreProvider({ children }) {
       user_id: auth.user_id,
       shipping_address: shippingAddress,
       payment_option: paymentOption,
+      latitude: coordinates?.latitude ?? null,
+      longitude: coordinates?.longitude ?? null,
       items: items.map((item) => ({
         product_id: item.product_id,
         quantity: item.quantity
@@ -226,7 +228,7 @@ export function StoreProvider({ children }) {
     });
 
     await refreshCart();
-    setStatus({ type: "success", message: "Order confirmed." });
+    setStatus({ type: "success", message: "Order placed successfully." });
     return order;
   }
 

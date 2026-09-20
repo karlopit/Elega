@@ -7,12 +7,10 @@ export function ActionButton({ as = "button", children, className = "", pending 
   return (
     <Component
       {...props}
-      aria-busy={pending || undefined}
-      className={`${className} inline-flex items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-50`}
+      className={`${className} inline-flex items-center justify-center gap-2 leading-none disabled:cursor-not-allowed`}
       disabled={isButton ? pending || disabled : undefined}
     >
-      {pending ? <span aria-hidden="true" className="action-spinner" /> : null}
-      <span>{children}</span>
+      {children}
     </Component>
   );
 }

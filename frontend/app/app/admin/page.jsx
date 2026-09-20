@@ -6,7 +6,6 @@ import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useStore } from "@/context/StoreContext";
 import { getAdminDashboard, getApiErrorMessage, getPaymentQr, uploadPaymentQr, deletePaymentQr } from "@/lib/api";
 import { ActionButton } from "@/components/ActionButton";
-import { SkeletonBlock } from "@/components/SkeletonBlock";
 
 const MAX_QR_SIZE = 5 * 1024 * 1024;
 const QR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -15,7 +14,6 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { auth, authReady } = useStore();
   const [stats, setStats] = useState(null);
-  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [error, setError] = useState("");
   const [qrUrl, setQrUrl] = useState(null);
   const [qrMessage, setQrMessage] = useState("");
@@ -40,8 +38,7 @@ export default function AdminDashboard() {
       .catch((err) => {
         console.error(err);
         setError("Unable to load dashboard.");
-      })
-      .finally(() => setDashboardLoading(false));
+      });
     getPaymentQr()
       .then((data) => setQrUrl(data.image_url || null))
       .catch((err) => {
@@ -159,10 +156,7 @@ export default function AdminDashboard() {
           </section>
 
           <div className="mt-10 grid gap-5 md:grid-cols-3">
-            {dashboardLoading ? (
-              [0, 1, 2].map((item) => <SkeletonBlock className="h-36 w-full" key={item} />)
-            ) : (
-              <>
+            <>
                 <div className="border border-line bg-ivory p-6">
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Sold quantity</p>
                   <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.sold_quantity ?? 0}</p>
@@ -175,8 +169,7 @@ export default function AdminDashboard() {
                   <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Top products tracked</p>
                   <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.top_sold_products?.length ?? 0}</p>
                 </div>
-              </>
-            )}
+            </>
           </div>
 
           <section className="mt-10 border border-line bg-ivory p-6">

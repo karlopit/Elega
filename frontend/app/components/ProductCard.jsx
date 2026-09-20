@@ -68,12 +68,12 @@ export function ProductCard({ product }) {
             Buy
           </button>
           <ActionButton
-            className="focus-ring inline-flex items-center justify-center gap-2 border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-ink transition hover:border-gold hover:text-gold"
+            className="focus-ring h-12 leading-none border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-ink transition hover:border-gold hover:text-gold"
             onClick={handleAddToCart}
             pending={adding}
             type="button"
           >
-            <ShoppingBag size={15} />
+            <ShoppingBag className="shrink-0" size={15} />
             Add to cart
           </ActionButton>
         </div>
