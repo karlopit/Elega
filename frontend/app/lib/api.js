@@ -95,6 +95,24 @@ async function request(path, options = {}) {
     }
 
     return data;
+  } catch (error) {
+    if (error?.status) {
+      throw error;
+    }
+
+    if (error?.message?.includes("NEXT_PUBLIC_API_URL")) {
+      throw error;
+    }
+
+    if (process.env.NODE_ENV === "development") {
+      console.error("API request could not reach the backend.", { path, error });
+    }
+    const networkError = new Error(
+      "We could not reach the store server. Please check the connection and try again."
+    );
+    networkError.cause = error;
+    networkError.status = 0;
+    throw networkError;
   } finally {
     if (showLoading) {
       emitLoadingEvent("end");
