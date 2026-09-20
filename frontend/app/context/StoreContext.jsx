@@ -95,10 +95,14 @@ export function StoreProvider({ children }) {
       setAuth(response);
       window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(response));
 
+      const accountCart = await getCart(response.user_id, response.access_token);
+      const accountQuantities = new Map(
+        (accountCart.items || []).map((item) => [item.product_id, item.quantity])
+      );
       for (const item of guestCart) {
         await upsertCartItem(response.user_id, response.access_token, {
           product_id: item.product_id,
-          quantity: item.quantity
+          quantity: Math.min(99, (accountQuantities.get(item.product_id) || 0) + item.quantity)
         });
       }
 

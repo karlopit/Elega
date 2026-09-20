@@ -5,11 +5,13 @@ import { useEffect, useState } from "react";
 import { useStore } from "@/context/StoreContext";
 import { formatMoney } from "@/lib/format";
 import { listOrders } from "@/lib/api";
+import { SkeletonBlock } from "@/components/SkeletonBlock";
 
 export default function OrdersPage() {
   const { auth } = useStore();
   const [orders, setOrders] = useState([]);
   const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!auth) {
@@ -21,7 +23,8 @@ export default function OrdersPage() {
       .catch((error) => {
         console.error(error);
         setMessage("We could not load your orders right now.");
-      });
+      })
+      .finally(() => setLoading(false));
   }, [auth]);
 
   if (!auth) {
@@ -44,7 +47,11 @@ export default function OrdersPage() {
         <h1 className="mt-4 font-display text-5xl font-semibold text-ink">Purchase history</h1>
         {message ? <p className="mt-6 text-sm text-muted">{message}</p> : null}
         <div className="mt-10 divide-y divide-line border-y border-line">
-          {orders.length > 0 ? (
+          {loading ? (
+            <div className="space-y-4 py-6">
+              {[0, 1].map((item) => <SkeletonBlock className="h-24 w-full" key={item} />)}
+            </div>
+          ) : orders.length > 0 ? (
             orders.map((order) => (
               <article className="grid gap-4 py-6 md:grid-cols-[1fr_auto]" key={order.id}>
                 <div>

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useStore } from "@/context/StoreContext";
 import { getAdminDashboard, getApiErrorMessage, getPaymentQr, uploadPaymentQr, deletePaymentQr } from "@/lib/api";
+import { ActionButton } from "@/components/ActionButton";
+import { SkeletonBlock } from "@/components/SkeletonBlock";
 
 const MAX_QR_SIZE = 5 * 1024 * 1024;
 const QR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -13,6 +15,7 @@ export default function AdminDashboard() {
   const router = useRouter();
   const { auth, authReady } = useStore();
   const [stats, setStats] = useState(null);
+  const [dashboardLoading, setDashboardLoading] = useState(true);
   const [error, setError] = useState("");
   const [qrUrl, setQrUrl] = useState(null);
   const [qrMessage, setQrMessage] = useState("");
@@ -32,10 +35,13 @@ export default function AdminDashboard() {
       return;
     }
 
-    getAdminDashboard(auth.access_token).then(setStats).catch((err) => {
-      console.error(err);
-      setError("Unable to load dashboard.");
-    });
+    getAdminDashboard(auth.access_token)
+      .then(setStats)
+      .catch((err) => {
+        console.error(err);
+        setError("Unable to load dashboard.");
+      })
+      .finally(() => setDashboardLoading(false));
     getPaymentQr()
       .then((data) => setQrUrl(data.image_url || null))
       .catch((err) => {
@@ -111,7 +117,11 @@ export default function AdminDashboard() {
                   Upload the QR image customers should scan when they choose GCash at checkout. Re-uploading replaces the current image.
                 </p>
               </div>
-              <label className="focus-ring inline-flex cursor-pointer items-center justify-center border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-paper transition hover:bg-paper hover:text-gold">
+              <ActionButton
+                as="label"
+                className="focus-ring cursor-pointer border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-paper transition hover:bg-paper hover:text-gold"
+                pending={qrBusy}
+              >
                 {qrBusy ? "Saving" : "Upload QR"}
                 <input
                   accept="image/jpeg,image/png,image/webp,image/gif"
@@ -120,7 +130,7 @@ export default function AdminDashboard() {
                   onChange={handleQrUpload}
                   type="file"
                 />
-              </label>
+              </ActionButton>
             </div>
             <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start">
               {qrUrl ? (
@@ -133,14 +143,14 @@ export default function AdminDashboard() {
               <div className="text-sm text-muted">
                 <p>Supported files: JPEG, PNG, WebP, or GIF up to 5MB.</p>
                 {qrUrl ? (
-                  <button
+                  <ActionButton
                     className="focus-ring mt-5 border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] transition hover:border-red-300 hover:text-red-700"
-                    disabled={qrBusy}
                     onClick={handleQrDelete}
+                    pending={qrBusy}
                     type="button"
                   >
                     Delete QR code
-                  </button>
+                  </ActionButton>
                 ) : null}
               </div>
             </div>
@@ -149,18 +159,24 @@ export default function AdminDashboard() {
           </section>
 
           <div className="mt-10 grid gap-5 md:grid-cols-3">
-            <div className="border border-line bg-ivory p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Sold quantity</p>
-              <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.sold_quantity ?? 0}</p>
-            </div>
-            <div className="border border-line bg-ivory p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Available products</p>
-              <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.available_products ?? 0}</p>
-            </div>
-            <div className="border border-line bg-ivory p-6">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Top products tracked</p>
-              <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.top_sold_products?.length ?? 0}</p>
-            </div>
+            {dashboardLoading ? (
+              [0, 1, 2].map((item) => <SkeletonBlock className="h-36 w-full" key={item} />)
+            ) : (
+              <>
+                <div className="border border-line bg-ivory p-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Sold quantity</p>
+                  <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.sold_quantity ?? 0}</p>
+                </div>
+                <div className="border border-line bg-ivory p-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Available products</p>
+                  <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.available_products ?? 0}</p>
+                </div>
+                <div className="border border-line bg-ivory p-6">
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-muted">Top products tracked</p>
+                  <p className="mt-4 font-display text-5xl font-semibold text-ink">{stats?.top_sold_products?.length ?? 0}</p>
+                </div>
+              </>
+            )}
           </div>
 
           <section className="mt-10 border border-line bg-ivory p-6">

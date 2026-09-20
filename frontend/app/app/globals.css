@@ -18,6 +18,24 @@
 
 html {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable;
+  scrollbar-color: transparent transparent;
+  scrollbar-width: thin;
+}
+
+html::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+html::-webkit-scrollbar-track,
+html::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+html::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  background-clip: content-box;
 }
 
 body {
@@ -34,6 +52,45 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+.action-spinner {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: 0 0 auto;
+  border: 1px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  animation: actionSpin 700ms linear infinite;
+}
+
+.page-transition {
+  animation: pageFadeIn 320ms ease-out both;
+}
+
+.route-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 100;
+  height: 2px;
+  background: var(--color-gold);
+  transform-origin: left;
+  animation: routeProgress 320ms ease-out both;
+}
+
+.skeleton-block {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-ivory);
+}
+
+.skeleton-block::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 55%), transparent);
+  transform: translateX(-100%);
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
 }
 
 img {
@@ -107,6 +164,44 @@ img {
   }
 }
 
+@keyframes actionSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pageFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes routeProgress {
+  from {
+    opacity: 0;
+    transform: scaleX(0.05);
+  }
+  35% {
+    opacity: 1;
+    transform: scaleX(0.68);
+  }
+  to {
+    opacity: 0;
+    transform: scaleX(1);
+  }
+}
+
+@keyframes skeletonShimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marquee-track {
     animation: none;
@@ -114,5 +209,15 @@ img {
 
   .cart-fly-image {
     animation-duration: 1ms;
+  }
+
+  .action-spinner,
+  .page-transition,
+  .skeleton-block::after {
+    animation: none;
+  }
+
+  .route-progress {
+    display: none;
   }
 }

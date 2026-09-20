@@ -15,6 +15,18 @@ limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
 
 
+def _storage_error_category(error: Exception) -> str:
+    """Classify common Supabase Storage failures for server logs."""
+    detail = str(error).lower()
+    if "bucket not found" in detail or ("bucket" in detail and "404" in detail):
+        return "bucket_missing"
+    if "not public" in detail or "public bucket" in detail or "access denied" in detail:
+        return "bucket_private_or_inaccessible"
+    if "unauthorized" in detail or "invalid jwt" in detail or "apikey" in detail:
+        return "invalid_storage_credentials"
+    return "storage_error"
+
+
 @router.get("", response_model=list[ProductResponse])
 @limiter.limit("30/minute")
 async def list_products(request: Request, include_inactive: bool = False) -> list[ProductResponse]:
@@ -151,7 +163,11 @@ async def upload_product_image(
         public_url = supabase.storage.from_("product-images").get_public_url(filename)
         return {"image_url": public_url}
     except Exception as exc:
-        logger.exception("Failed to upload product image to Supabase Storage")
+        logger.exception(
+            "Failed to upload product image to Supabase Storage: category=%s detail=%s",
+            _storage_error_category(exc),
+            exc,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Product image storage is unavailable. Check that the 'product-images' bucket exists and is public.",

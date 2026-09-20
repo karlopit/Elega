@@ -5,6 +5,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Edit3, Plus, Upload, X } from "lucide-react";
 import { StaffSidebar } from "@/components/staff/StaffSidebar";
+import { ActionButton } from "@/components/ActionButton";
+import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { useStore } from "@/context/StoreContext";
 import { createProduct, getApiErrorMessage, listProducts, updateProduct, uploadProductImage } from "@/lib/api";
 import { formatMoney } from "@/lib/format";
@@ -29,6 +31,9 @@ export function StaffProductsManager({ section }) {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [disablingId, setDisablingId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!authReady) {
@@ -46,8 +51,13 @@ export function StaffProductsManager({ section }) {
   }, [auth, authReady, router, section]);
 
   async function refreshProducts() {
-    const data = await listProducts(true);
-    setProducts(data);
+    setLoading(true);
+    try {
+      const data = await listProducts(true);
+      setProducts(data);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const sectionProducts = useMemo(
@@ -101,6 +111,7 @@ export function StaffProductsManager({ section }) {
     event.preventDefault();
     setError("");
     setMessage("");
+    setSaving(true);
 
     const payload = {
       ...form,
@@ -122,12 +133,15 @@ export function StaffProductsManager({ section }) {
     } catch (err) {
       console.error(err);
       setError(getApiErrorMessage(err, "Unable to save product."));
+    } finally {
+      setSaving(false);
     }
   }
 
   async function handleDisable(product) {
     setError("");
     setMessage("");
+    setDisablingId(product.id);
     try {
       await updateProduct(product.id, auth.access_token, { is_active: false });
       setMessage("Product disabled.");
@@ -135,6 +149,8 @@ export function StaffProductsManager({ section }) {
     } catch (err) {
       console.error(err);
       setError("Unable to disable product.");
+    } finally {
+      setDisablingId(null);
     }
   }
 
@@ -161,6 +177,11 @@ export function StaffProductsManager({ section }) {
           {message ? <p className="mt-6 border border-gold bg-ivory px-4 py-3 text-sm text-ink">{message}</p> : null}
           {error ? <p className="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
+          {loading ? (
+            <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+              {[0, 1, 2].map((item) => <SkeletonBlock className="aspect-[4/5] w-full" key={item} />)}
+            </div>
+          ) : (
           <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
             {sectionProducts.map((product) => (
               <article className="border-b border-line pb-6" key={product.id}>
@@ -193,17 +214,19 @@ export function StaffProductsManager({ section }) {
                     <Edit3 size={15} />
                     Edit
                   </button>
-                  <button
+                  <ActionButton
                     className="focus-ring border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-muted transition hover:border-gold hover:text-gold"
                     onClick={() => handleDisable(product)}
+                    pending={disablingId === product.id}
                     type="button"
                   >
-                    Disable
-                  </button>
+                    {disablingId === product.id ? "Disabling" : "Disable"}
+                  </ActionButton>
                 </div>
               </article>
             ))}
           </div>
+          )}
         </div>
       </section>
 
@@ -224,13 +247,15 @@ export function StaffProductsManager({ section }) {
 
             <label className="mt-6 block text-sm font-medium text-ink">
               Product picture
-              <span className="mt-2 flex items-center justify-center border border-line bg-ivory px-4 py-6">
-                <span className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted">
+              <ActionButton
+                as="label"
+                className="mt-2 w-full cursor-pointer border border-line bg-ivory px-4 py-6 text-xs font-semibold uppercase tracking-[0.18em] text-muted"
+                pending={uploading}
+              >
                   <Upload size={15} />
                   {uploading ? "Uploading" : "Upload image"}
-                  <input className="hidden" accept="image/*" onChange={handleImageUpload} type="file" />
-                </span>
-              </span>
+                  <input className="hidden" accept="image/*" disabled={uploading} onChange={handleImageUpload} type="file" />
+              </ActionButton>
             </label>
             <input
               className="focus-ring mt-3 w-full border border-line bg-ivory px-4 py-3 text-sm text-ink"
@@ -256,9 +281,13 @@ export function StaffProductsManager({ section }) {
               <button className="focus-ring border border-line px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted transition hover:border-gold hover:text-gold" onClick={() => setModalOpen(false)} type="button">
                 Cancel
               </button>
-              <button className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold" type="submit">
+              <ActionButton
+                className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold"
+                pending={saving}
+                type="submit"
+              >
                 {selectedProduct ? "Save" : "Add"}
-              </button>
+              </ActionButton>
             </div>
           </form>
         </div>

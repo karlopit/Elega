@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
 import { getApiErrorMessage, getBootstrapStatus } from "@/lib/api";
+import { ActionButton } from "@/components/ActionButton";
 
 function routeForRole(role) {
   if (role === "admin") {
@@ -24,6 +25,7 @@ export default function AccountPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [checkingSetup, setCheckingSetup] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     getBootstrapStatus()
@@ -66,11 +68,14 @@ export default function AccountPage() {
     }
 
     try {
+      setSubmitting(true);
       const response = await signIn(form, mode);
       router.push(routeForRole(response.role));
     } catch (err) {
       console.error(err);
       setError(getApiErrorMessage(err, "We could not complete that account request. Please try again."));
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -158,9 +163,13 @@ export default function AccountPage() {
           </label>
           {error ? <p className="mb-4 text-sm text-red-700">{error}</p> : null}
           {status.message ? <p className="mb-4 text-sm text-muted">{status.message}</p> : null}
-          <button className="focus-ring w-full border border-gold px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-ink transition hover:text-gold" type="submit">
+          <ActionButton
+            className="focus-ring w-full border border-gold px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] text-ink transition hover:text-gold"
+            pending={submitting}
+            type="submit"
+          >
             {mode === "setup" ? "Create first admin" : "Continue"}
-          </button>
+          </ActionButton>
         </form>
       </section>
     </main>

@@ -4,6 +4,7 @@ import { StoreProvider } from "@/context/StoreContext";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
 import { StoreToast } from "@/components/StoreToast";
+import { PageTransition } from "@/components/PageTransition";
 
 const display = Cormorant_Garamond({
   subsets: ["latin"],
@@ -28,7 +29,7 @@ export default function RootLayout({ children }) {
       <body className={`${display.variable} ${body.variable} font-body antialiased`}>
         <StoreProvider>
           <Header />
-          {children}
+          <PageTransition>{children}</PageTransition>
           <Footer />
           <StoreToast />
         </StoreProvider>

@@ -104,19 +104,13 @@ export default function CartPage() {
                 <span className="font-semibold text-ink">{formatMoney(subtotal, currency)}</span>
               </div>
               {message ? <p className="mt-4 text-sm text-muted">{message}</p> : null}
-              {!auth ? (
-                <Link className="focus-ring mt-6 flex justify-center border border-gold px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em]" href="/account">
-                  Sign in to checkout
-                </Link>
-              ) : (
-                <button
-                  className="focus-ring mt-6 w-full border border-gold px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] transition hover:text-gold"
-                  onClick={() => setCheckoutItems(cartRows)}
-                  type="button"
-                >
-                  Buy all
-                </button>
-              )}
+              <button
+                className="focus-ring mt-6 w-full border border-gold px-5 py-3 text-sm font-semibold uppercase tracking-[0.22em] transition hover:text-gold"
+                onClick={() => setCheckoutItems(cartRows)}
+                type="button"
+              >
+                {auth ? "Buy all" : "Sign in to checkout"}
+              </button>
             </aside>
           </div>
         )}

@@ -4,9 +4,13 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
 import { getApiErrorMessage, getPaymentQr } from "@/lib/api";
+import { ActionButton } from "@/components/ActionButton";
 
 export function CheckoutModal({ items, open, onClose }) {
-  const { auth, placeOrder } = useStore();
+  const { auth, placeOrder, signIn } = useStore();
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [loginError, setLoginError] = useState("");
+  const [loginPending, setLoginPending] = useState(false);
   const [address, setAddress] = useState("");
   const [paymentOption, setPaymentOption] = useState("cash");
   const [message, setMessage] = useState("");
@@ -24,6 +28,8 @@ export function CheckoutModal({ items, open, onClose }) {
       setConfirmed(false);
       setQrUrl(null);
       setQrError("");
+      setLoginForm({ email: "", password: "" });
+      setLoginError("");
       return;
     }
 
@@ -66,6 +72,25 @@ export function CheckoutModal({ items, open, onClose }) {
     return null;
   }
 
+  async function handleSignIn(event) {
+    event.preventDefault();
+    setLoginError("");
+    if (!loginForm.email.includes("@") || loginForm.password.length < 8) {
+      setLoginError("Use a valid email and a password with at least 8 characters.");
+      return;
+    }
+
+    setLoginPending(true);
+    try {
+      await signIn(loginForm, "login");
+    } catch (error) {
+      console.error(error);
+      setLoginError(getApiErrorMessage(error, "We could not sign you in. Please try again."));
+    } finally {
+      setLoginPending(false);
+    }
+  }
+
   async function handleConfirm(event) {
     event.preventDefault();
     setMessage("");
@@ -98,7 +123,10 @@ export function CheckoutModal({ items, open, onClose }) {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-ink/30 px-5 backdrop-blur-sm">
-      <form className="w-full max-w-md border border-line bg-paper p-6 shadow-soft" onSubmit={handleConfirm}>
+      <form
+        className="w-full max-w-md border border-line bg-paper p-6 shadow-soft"
+        onSubmit={auth ? handleConfirm : handleSignIn}
+      >
         <div className="flex items-start justify-between gap-4 border-b border-line pb-5">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-gold">Checkout</p>
@@ -114,7 +142,48 @@ export function CheckoutModal({ items, open, onClose }) {
           </button>
         </div>
 
-         {confirmed ? (
+         {!auth ? (
+           <>
+             <p className="mt-6 text-sm leading-6 text-muted">Sign in to continue to checkout. Your cart will stay intact and merge with your account.</p>
+             <label className="mt-6 block text-sm font-medium text-ink">
+               Email
+               <input
+                 autoComplete="username"
+                 className="focus-ring mt-2 w-full border border-line bg-ivory px-4 py-3 text-sm text-ink"
+                 onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })}
+                 type="email"
+                 value={loginForm.email}
+               />
+             </label>
+             <label className="mt-5 block text-sm font-medium text-ink">
+               Password
+               <input
+                 autoComplete="current-password"
+                 className="focus-ring mt-2 w-full border border-line bg-ivory px-4 py-3 text-sm text-ink"
+                 onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })}
+                 type="password"
+                 value={loginForm.password}
+               />
+             </label>
+             {loginError ? <p className="mt-4 text-sm text-red-700">{loginError}</p> : null}
+             <div className="mt-7 grid grid-cols-2 gap-3">
+               <button
+                 className="focus-ring border border-line px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted transition hover:border-gold hover:text-gold"
+                 onClick={onClose}
+                 type="button"
+               >
+                 Cancel
+               </button>
+               <ActionButton
+                 className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold disabled:opacity-50"
+                 pending={loginPending}
+                 type="submit"
+               >
+                 {loginPending ? "Signing in" : "Sign in"}
+               </ActionButton>
+             </div>
+           </>
+         ) : confirmed ? (
            <div className="mt-8 border border-gold bg-ivory px-5 py-6">
              <p className="font-display text-3xl font-semibold text-ink">Order confirmed.</p>
              <p className="mt-3 text-sm leading-6 text-muted">Thank you. Your order has been placed and your cart is up to date.</p>
@@ -174,13 +243,13 @@ export function CheckoutModal({ items, open, onClose }) {
                >
                  Cancel
                </button>
-               <button
+               <ActionButton
                  className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold disabled:opacity-50"
-                 disabled={saving}
+                 pending={saving}
                  type="submit"
                >
                  {saving ? "Confirming" : "Confirm"}
-               </button>
+               </ActionButton>
              </div>
            </>
          )}

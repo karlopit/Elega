@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useStore } from "@/context/StoreContext";
 import { createUser, getApiErrorMessage, listUsers, updateUser, updateUserRole } from "@/lib/api";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
+import { ActionButton } from "@/components/ActionButton";
+import { SkeletonBlock } from "@/components/SkeletonBlock";
 import { Check, Edit3, Plus, Power } from "lucide-react";
 
 const ROLES = ["user", "staff", "admin"];
@@ -177,8 +179,12 @@ export default function UsersDashboard() {
 
   if (loading && users.length === 0) {
     return (
-      <main className="bg-paper px-5 py-24 text-center">
-        <p className="text-sm font-semibold uppercase tracking-[0.28em] text-gold">Loading Users...</p>
+      <main className="bg-paper px-5 py-24">
+        <div className="mx-auto max-w-6xl">
+          <SkeletonBlock className="h-3 w-28" />
+          <SkeletonBlock className="mt-5 h-14 w-80 max-w-full" />
+          <SkeletonBlock className="mt-10 h-96 w-full" />
+        </div>
       </main>
     );
   }
@@ -253,24 +259,25 @@ export default function UsersDashboard() {
                           </option>
                         ))}
                       </select>
-                      <button
+                      <ActionButton
                         className="focus-ring inline-flex items-center gap-2 border border-line px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted transition hover:border-gold hover:text-gold disabled:opacity-50"
-                        disabled={savingId === user.id || user.id === currentUserId}
+                        disabled={user.id === currentUserId}
                         onClick={() => handleDisabledToggle(user)}
+                        pending={savingId === user.id}
                         type="button"
                       >
                         <Power size={14} />
                         {user.is_disabled ? "Enable" : "Disable"}
-                      </button>
+                      </ActionButton>
                       {editingId === user.id ? (
-                        <button
+                        <ActionButton
                           className="focus-ring border border-gold bg-ink px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-paper transition hover:bg-paper hover:text-gold"
-                          disabled={savingId === user.id}
                           onClick={() => handleInfoSave(user)}
+                          pending={savingId === user.id}
                           type="button"
                         >
                           Save
-                        </button>
+                        </ActionButton>
                       ) : (
                         <button
                           className="focus-ring inline-flex items-center gap-2 border border-line px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-muted transition hover:border-gold hover:text-gold"
@@ -331,13 +338,13 @@ export default function UsersDashboard() {
                   <option value="admin">Admin</option>
                 </select>
               </label>
-              <button
+              <ActionButton
                 className="focus-ring flex w-full items-center justify-center gap-2 border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-gold hover:text-ink disabled:opacity-50"
-                disabled={creating}
+                pending={creating}
                 type="submit"
               >
-                <Plus size={14} /> {creating ? "Creating..." : "Create Account"}
-              </button>
+                <Plus size={14} /> Create Account
+              </ActionButton>
               <p className="text-xs text-muted">
                 Share the email and temporary password with them directly — there is no email invite yet.
               </p>

@@ -4,16 +4,18 @@ import Image from "next/image";
 import { useRef, useState } from "react";
 import { ShoppingBag } from "lucide-react";
 import { CheckoutModal } from "@/components/CheckoutModal";
+import { ActionButton } from "@/components/ActionButton";
 import { useStore } from "@/context/StoreContext";
 import { formatMoney } from "@/lib/format";
 
 export function ProductCard({ product }) {
   const { addToCart } = useStore();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
   const imageContainerRef = useRef(null);
   const image = product.image_url || "/product-placeholder.svg";
 
-  function handleAddToCart() {
+  async function handleAddToCart() {
     const source = imageContainerRef.current?.getBoundingClientRect();
     if (source && typeof window !== "undefined") {
       window.dispatchEvent(
@@ -23,9 +25,14 @@ export function ProductCard({ product }) {
       );
     }
 
-    addToCart(product).catch((error) => {
+    setAdding(true);
+    try {
+      await addToCart(product);
+    } catch (error) {
       console.error(error);
-    });
+    } finally {
+      setAdding(false);
+    }
   }
 
   return (
@@ -60,14 +67,15 @@ export function ProductCard({ product }) {
           >
             Buy
           </button>
-          <button
+          <ActionButton
             className="focus-ring inline-flex items-center justify-center gap-2 border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-ink transition hover:border-gold hover:text-gold"
             onClick={handleAddToCart}
+            pending={adding}
             type="button"
           >
             <ShoppingBag size={15} />
             Add to cart
-          </button>
+          </ActionButton>
         </div>
       </article>
       <CheckoutModal
