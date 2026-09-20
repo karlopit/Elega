@@ -15,11 +15,13 @@ function routeForRole(role) {
   return "/shop";
 }
 
+const EMPTY_FORM = { email: "", password: "", full_name: "", setup_secret: "" };
+
 export default function AccountPage() {
   const router = useRouter();
   const { signIn, status } = useStore();
   const [mode, setMode] = useState("login");
-  const [form, setForm] = useState({ email: "", password: "", full_name: "", setup_secret: "" });
+  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [checkingSetup, setCheckingSetup] = useState(true);
 
@@ -37,6 +39,17 @@ export default function AccountPage() {
       })
       .finally(() => setCheckingSetup(false));
   }, []);
+
+  useEffect(() => {
+    setForm(EMPTY_FORM);
+    setError("");
+  }, [mode]);
+
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setForm(EMPTY_FORM);
+    setError("");
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -73,7 +86,7 @@ export default function AccountPage() {
             Sign in to sync cart items with the backend, place orders, and return to your selections.
           </p>
         </div>
-        <form className="border border-line bg-ivory p-6 md:p-8" onSubmit={handleSubmit}>
+        <form autoComplete="off" className="border border-line bg-ivory p-6 md:p-8" onSubmit={handleSubmit}>
           {checkingSetup ? (
             <p className="mb-8 text-sm text-muted">Checking setup status.</p>
           ) : null}
@@ -90,7 +103,7 @@ export default function AccountPage() {
                     mode === item ? "bg-ink text-paper" : "text-muted"
                   }`}
                   key={item}
-                  onClick={() => setMode(item)}
+                  onClick={() => switchMode(item)}
                   type="button"
                 >
                   {item}
@@ -103,6 +116,7 @@ export default function AccountPage() {
             <label className="mb-5 block text-sm font-medium text-ink">
               Full name
               <input
+                autoComplete="name"
                 className="focus-ring mt-2 w-full border border-line bg-paper px-4 py-3 text-ink"
                 onChange={(event) => setForm({ ...form, full_name: event.target.value })}
                 value={form.full_name}
@@ -115,6 +129,7 @@ export default function AccountPage() {
               <input
                 className="focus-ring mt-2 w-full border border-line bg-paper px-4 py-3 text-ink"
                 onChange={(event) => setForm({ ...form, setup_secret: event.target.value })}
+                autoComplete="new-password"
                 placeholder="Leave blank if not configured"
                 type="password"
                 value={form.setup_secret}
@@ -124,6 +139,7 @@ export default function AccountPage() {
           <label className="mb-5 block text-sm font-medium text-ink">
             Email
             <input
+              autoComplete="username"
               className="focus-ring mt-2 w-full border border-line bg-paper px-4 py-3 text-ink"
               onChange={(event) => setForm({ ...form, email: event.target.value })}
               type="email"
@@ -133,6 +149,7 @@ export default function AccountPage() {
           <label className="mb-6 block text-sm font-medium text-ink">
             Password
             <input
+              autoComplete="new-password"
               className="focus-ring mt-2 w-full border border-line bg-paper px-4 py-3 text-ink"
               onChange={(event) => setForm({ ...form, password: event.target.value })}
               type="password"

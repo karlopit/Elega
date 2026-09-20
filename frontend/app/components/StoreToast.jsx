@@ -8,7 +8,7 @@ export function StoreToast() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (status.type !== "success" || !status.message) {
+    if (!["success", "error"].includes(status.type) || !status.message) {
       setVisible(false);
       return;
     }
@@ -23,7 +23,11 @@ export function StoreToast() {
   }
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 border border-gold bg-paper px-5 py-3 text-sm font-medium text-ink shadow-soft">
+    <div
+      className={`fixed bottom-5 right-5 z-50 border bg-paper px-5 py-3 text-sm font-medium shadow-soft ${
+        status.type === "error" ? "border-red-300 text-red-700" : "border-gold text-ink"
+      }`}
+    >
       {status.message}
     </div>
   );

@@ -1,9 +1,10 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   bootstrapAdmin,
   createOrder,
+  getApiErrorMessage,
   getCart,
   loginUser,
   registerUser,
@@ -34,10 +35,14 @@ export function StoreProvider({ children }) {
   const [guestCart, setGuestCart] = useState([]);
   const [remoteCart, setRemoteCart] = useState([]);
   const [status, setStatus] = useState({ type: "idle", message: "" });
+  const cartSnapshotRef = useRef([]);
+  const cartSyncRef = useRef(new Map());
 
   useEffect(() => {
     setAuth(readStoredJson(AUTH_STORAGE_KEY, null));
-    setGuestCart(readStoredJson(GUEST_CART_KEY, []));
+    const storedGuestCart = readStoredJson(GUEST_CART_KEY, []);
+    cartSnapshotRef.current = storedGuestCart;
+    setGuestCart(storedGuestCart);
     setAuthReady(true);
   }, []);
 
@@ -47,14 +52,27 @@ export function StoreProvider({ children }) {
     }
   }, [guestCart]);
 
-  async function refreshCart(nextAuth = auth) {
+  const refreshCart = useCallback(async (nextAuth = auth) => {
     if (!nextAuth?.user_id || !nextAuth?.access_token) {
       return;
     }
 
     const cart = await getCart(nextAuth.user_id, nextAuth.access_token);
-    setRemoteCart(cart.items || []);
-  }
+    const items = cart.items || [];
+    cartSnapshotRef.current = items;
+    setRemoteCart(items);
+  }, [auth]);
+
+  useEffect(() => {
+    if (!authReady || !auth) {
+      return;
+    }
+
+    refreshCart(auth).catch((error) => {
+      console.error(error);
+      setStatus({ type: "error", message: "We could not load your cart right now." });
+    });
+  }, [auth, authReady, refreshCart]);
 
   async function signIn(payload, mode) {
     setStatus({ type: "loading", message: "Preparing your Elega session." });
@@ -85,6 +103,7 @@ export function StoreProvider({ children }) {
       }
 
       setGuestCart([]);
+      cartSnapshotRef.current = [];
       await refreshCart(response);
       setStatus({ type: "success", message: "You are signed in." });
       return response;
@@ -97,6 +116,7 @@ export function StoreProvider({ children }) {
   function signOut() {
     setAuth(null);
     setRemoteCart([]);
+    cartSnapshotRef.current = guestCart;
     window.localStorage.removeItem(AUTH_STORAGE_KEY);
     setStatus({ type: "idle", message: "" });
   }
@@ -105,39 +125,72 @@ export function StoreProvider({ children }) {
     const nextQuantity = Math.max(1, Math.min(99, quantity));
 
     if (!auth) {
-      setGuestCart((items) => {
-        const existing = items.find((item) => item.product_id === product.id);
-        if (existing) {
-          return items.map((item) =>
+      const existing = cartSnapshotRef.current.find((item) => item.product_id === product.id);
+      const nextItems = existing
+        ? cartSnapshotRef.current.map((item) =>
             item.product_id === product.id
               ? { ...item, quantity: Math.min(99, item.quantity + nextQuantity) }
               : item
-          );
-        }
-        return [
-          ...items,
-          {
-            product_id: product.id,
-            quantity: nextQuantity
-          }
-        ];
-      });
+          )
+        : [...cartSnapshotRef.current, { product_id: product.id, quantity: nextQuantity }];
+      cartSnapshotRef.current = nextItems;
+      setGuestCart(nextItems);
       setStatus({ type: "success", message: "Item added to cart." });
       return;
     }
 
-    const existing = remoteCart.find((item) => item.product_id === product.id);
-    await upsertCartItem(auth.user_id, auth.access_token, {
-      product_id: product.id,
-      quantity: Math.min(99, (existing?.quantity || 0) + nextQuantity)
-    });
-    await refreshCart();
-    setStatus({ type: "success", message: "Item added to cart." });
+    const currentItems = cartSnapshotRef.current;
+    const existing = currentItems.find((item) => item.product_id === product.id);
+    const targetQuantity = Math.min(99, (existing?.quantity || 0) + nextQuantity);
+    const nextItems = existing
+      ? currentItems.map((item) =>
+          item.product_id === product.id ? { ...item, quantity: targetQuantity } : item
+        )
+      : [...currentItems, { product_id: product.id, quantity: targetQuantity }];
+
+    // Update the visible cart before the network round trip so the badge is
+    // responsive. The per-product queue makes rapid clicks cumulative instead
+    // of letting concurrent requests overwrite one another with stale values.
+    cartSnapshotRef.current = nextItems;
+    setRemoteCart(nextItems);
+
+    const previous = cartSyncRef.current.get(product.id) || Promise.resolve();
+    const operation = previous
+      .catch(() => undefined)
+      .then(() =>
+        upsertCartItem(auth.user_id, auth.access_token, {
+          product_id: product.id,
+          quantity: targetQuantity
+        })
+      );
+    cartSyncRef.current.set(product.id, operation);
+
+    try {
+      await operation;
+      if (cartSyncRef.current.get(product.id) === operation) {
+        await refreshCart(auth);
+        cartSyncRef.current.delete(product.id);
+      }
+      setStatus({ type: "success", message: "Item added to cart." });
+    } catch (error) {
+      if (cartSyncRef.current.get(product.id) === operation) {
+        cartSyncRef.current.delete(product.id);
+        try {
+          await refreshCart(auth);
+        } catch (refreshError) {
+          console.error(refreshError);
+        }
+      }
+      setStatus({ type: "error", message: getApiErrorMessage(error, "Unable to add this item to your cart.") });
+      throw error;
+    }
   }
 
   async function removeFromCart(productId) {
     if (!auth) {
-      setGuestCart((items) => items.filter((item) => item.product_id !== productId));
+      const nextItems = cartSnapshotRef.current.filter((item) => item.product_id !== productId);
+      cartSnapshotRef.current = nextItems;
+      setGuestCart(nextItems);
       return;
     }
 
@@ -150,6 +203,14 @@ export function StoreProvider({ children }) {
       throw new Error("Please sign in before checkout.");
     }
 
+    if (!items?.length) {
+      throw new Error("Your cart is empty.");
+    }
+
+    if (shippingAddress.trim().length < 10) {
+      throw new Error("Please enter a complete shipping address.");
+    }
+
     const order = await createOrder(auth.access_token, {
       user_id: auth.user_id,
       shipping_address: shippingAddress,
@@ -160,8 +221,8 @@ export function StoreProvider({ children }) {
       }))
     });
 
-    await Promise.all(items.map((item) => removeCartItem(auth.user_id, auth.access_token, item.product_id)));
     await refreshCart();
+    setStatus({ type: "success", message: "Order confirmed." });
     return order;
   }
 

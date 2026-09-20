@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
+import { getApiErrorMessage, getPaymentQr } from "@/lib/api";
 
 export function CheckoutModal({ items, open, onClose }) {
   const { auth, placeOrder } = useStore();
@@ -10,6 +11,56 @@ export function CheckoutModal({ items, open, onClose }) {
   const [paymentOption, setPaymentOption] = useState("cash");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [confirmed, setConfirmed] = useState(false);
+  const [qrUrl, setQrUrl] = useState(null);
+  const [qrError, setQrError] = useState("");
+  const [qrLoading, setQrLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) {
+      setAddress("");
+      setPaymentOption("cash");
+      setMessage("");
+      setConfirmed(false);
+      setQrUrl(null);
+      setQrError("");
+      return;
+    }
+
+    if (paymentOption !== "gcash") {
+      setQrUrl(null);
+      setQrError("");
+      setQrLoading(false);
+      return;
+    }
+
+    let active = true;
+    setQrLoading(true);
+    setQrError("");
+    getPaymentQr()
+      .then((data) => {
+        if (active) {
+          setQrUrl(data.image_url || null);
+          setQrError("");
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (active) {
+          setQrUrl(null);
+          setQrError(getApiErrorMessage(error, "The GCash QR code is temporarily unavailable."));
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setQrLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [open, paymentOption]);
 
   if (!open) {
     return null;
@@ -36,13 +87,10 @@ export function CheckoutModal({ items, open, onClose }) {
         quantity: item.quantity
       }));
       await placeOrder(orderItems, address, paymentOption);
-      setAddress("");
-      setPaymentOption("cash");
-      setMessage("Order confirmed.");
-      onClose();
+      setConfirmed(true);
     } catch (error) {
       console.error(error);
-      setMessage("We could not place the order. Please try again.");
+      setMessage(getApiErrorMessage(error, "We could not place the order. Please try again."));
     } finally {
       setSaving(false);
     }
@@ -66,45 +114,76 @@ export function CheckoutModal({ items, open, onClose }) {
           </button>
         </div>
 
-        <label className="mt-6 block text-sm font-medium text-ink">
-          Address
-          <textarea
-            className="focus-ring mt-2 min-h-28 w-full resize-none border border-line bg-ivory px-4 py-3 text-sm text-ink"
-            onChange={(event) => setAddress(event.target.value)}
-            value={address}
-          />
-        </label>
+         {confirmed ? (
+           <div className="mt-8 border border-gold bg-ivory px-5 py-6">
+             <p className="font-display text-3xl font-semibold text-ink">Order confirmed.</p>
+             <p className="mt-3 text-sm leading-6 text-muted">Thank you. Your order has been placed and your cart is up to date.</p>
+             <button
+               className="focus-ring mt-6 border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold"
+               onClick={onClose}
+               type="button"
+             >
+               Continue
+             </button>
+           </div>
+         ) : (
+           <>
+             <label className="mt-6 block text-sm font-medium text-ink">
+               Address
+               <textarea
+                 className="focus-ring mt-2 min-h-28 w-full resize-none border border-line bg-ivory px-4 py-3 text-sm text-ink"
+                 onChange={(event) => setAddress(event.target.value)}
+                 value={address}
+               />
+             </label>
 
-        <label className="mt-5 block text-sm font-medium text-ink">
-          Payment option
-          <select
-            className="focus-ring mt-2 w-full border border-line bg-ivory px-4 py-3 text-sm uppercase tracking-[0.12em] text-ink"
-            onChange={(event) => setPaymentOption(event.target.value)}
-            value={paymentOption}
-          >
-            <option value="cash">Cash</option>
-            <option value="gcash">GCash</option>
-          </select>
-        </label>
+             <label className="mt-5 block text-sm font-medium text-ink">
+               Payment option
+               <select
+                 className="focus-ring mt-2 w-full border border-line bg-ivory px-4 py-3 text-sm uppercase tracking-[0.12em] text-ink"
+                 onChange={(event) => setPaymentOption(event.target.value)}
+                 value={paymentOption}
+               >
+                 <option value="cash">Cash</option>
+                 <option value="gcash">GCash</option>
+               </select>
+             </label>
 
-        {message ? <p className="mt-4 text-sm text-muted">{message}</p> : null}
+             {paymentOption === "gcash" ? (
+               <div className="mt-5 border border-line bg-ivory p-4">
+                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">GCash QR</p>
+                  {qrLoading ? (
+                    <p className="mt-3 text-sm text-muted">Loading payment QR code.</p>
+                  ) : qrError ? (
+                    <p className="mt-3 text-sm leading-6 text-muted">{qrError}</p>
+                  ) : qrUrl ? (
+                   <img alt="GCash payment QR code" className="mx-auto mt-4 h-48 w-48 bg-paper object-contain p-2" src={qrUrl} />
+                 ) : (
+                   <p className="mt-3 text-sm leading-6 text-muted">The store has not uploaded a GCash QR code yet. Please choose another payment method or contact support.</p>
+                 )}
+               </div>
+             ) : null}
 
-        <div className="mt-7 grid grid-cols-2 gap-3">
-          <button
-            className="focus-ring border border-line px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted transition hover:border-gold hover:text-gold"
-            onClick={onClose}
-            type="button"
-          >
-            Cancel
-          </button>
-          <button
-            className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold disabled:opacity-50"
-            disabled={saving}
-            type="submit"
-          >
-            {saving ? "Confirming" : "Confirm"}
-          </button>
-        </div>
+             {message ? <p className="mt-4 text-sm text-red-700">{message}</p> : null}
+
+             <div className="mt-7 grid grid-cols-2 gap-3">
+               <button
+                 className="focus-ring border border-line px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-muted transition hover:border-gold hover:text-gold"
+                 onClick={onClose}
+                 type="button"
+               >
+                 Cancel
+               </button>
+               <button
+                 className="focus-ring border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.22em] text-paper transition hover:bg-paper hover:text-gold disabled:opacity-50"
+                 disabled={saving}
+                 type="submit"
+               >
+                 {saving ? "Confirming" : "Confirm"}
+               </button>
+             </div>
+           </>
+         )}
       </form>
     </div>
   );

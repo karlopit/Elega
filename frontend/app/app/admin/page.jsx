@@ -4,13 +4,20 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/AdminSidebar";
 import { useStore } from "@/context/StoreContext";
-import { getAdminDashboard } from "@/lib/api";
+import { getAdminDashboard, getApiErrorMessage, getPaymentQr, uploadPaymentQr, deletePaymentQr } from "@/lib/api";
+
+const MAX_QR_SIZE = 5 * 1024 * 1024;
+const QR_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
 export default function AdminDashboard() {
   const router = useRouter();
   const { auth, authReady } = useStore();
   const [stats, setStats] = useState(null);
   const [error, setError] = useState("");
+  const [qrUrl, setQrUrl] = useState(null);
+  const [qrMessage, setQrMessage] = useState("");
+  const [qrError, setQrError] = useState("");
+  const [qrBusy, setQrBusy] = useState(false);
 
   useEffect(() => {
     if (!authReady) {
@@ -25,13 +32,63 @@ export default function AdminDashboard() {
       return;
     }
 
-    getAdminDashboard(auth.access_token)
-      .then(setStats)
+    getAdminDashboard(auth.access_token).then(setStats).catch((err) => {
+      console.error(err);
+      setError("Unable to load dashboard.");
+    });
+    getPaymentQr()
+      .then((data) => setQrUrl(data.image_url || null))
       .catch((err) => {
         console.error(err);
-        setError("Unable to load dashboard.");
+        setQrError(getApiErrorMessage(err, "Unable to load the payment QR code."));
       });
   }, [auth, authReady, router]);
+
+  async function handleQrUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    setQrMessage("");
+    setQrError("");
+    if (!QR_TYPES.includes(file.type)) {
+      setQrError("Choose a JPEG, PNG, WebP, or GIF image.");
+      return;
+    }
+    if (file.size > MAX_QR_SIZE) {
+      setQrError("The payment QR code must be 5MB or smaller.");
+      return;
+    }
+
+    setQrBusy(true);
+    try {
+      const result = await uploadPaymentQr(file, auth.access_token);
+      setQrUrl(result.image_url);
+      setQrMessage("GCash QR code uploaded.");
+    } catch (err) {
+      console.error(err);
+      setQrError(getApiErrorMessage(err, "Unable to upload the payment QR code."));
+    } finally {
+      setQrBusy(false);
+    }
+  }
+
+  async function handleQrDelete() {
+    setQrMessage("");
+    setQrError("");
+    setQrBusy(true);
+    try {
+      await deletePaymentQr(auth.access_token);
+      setQrUrl(null);
+      setQrMessage("GCash QR code deleted.");
+    } catch (err) {
+      console.error(err);
+      setQrError(getApiErrorMessage(err, "Unable to delete the payment QR code."));
+    } finally {
+      setQrBusy(false);
+    }
+  }
 
   const maxQuantity = Math.max(...(stats?.top_sold_products || []).map((item) => item.quantity), 1);
 
@@ -44,6 +101,52 @@ export default function AdminDashboard() {
           <h1 className="mt-3 font-display text-5xl font-semibold text-ink">Dashboard</h1>
 
           {error ? <p className="mt-6 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+
+          <section className="mt-10 border border-line bg-ivory p-6" id="payment-qr">
+            <div className="flex flex-col justify-between gap-5 border-b border-line pb-5 md:flex-row md:items-end">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-gold">Checkout setting</p>
+                <h2 className="mt-2 font-display text-3xl font-semibold text-ink">GCash payment QR</h2>
+                <p className="mt-2 max-w-xl text-sm leading-6 text-muted">
+                  Upload the QR image customers should scan when they choose GCash at checkout. Re-uploading replaces the current image.
+                </p>
+              </div>
+              <label className="focus-ring inline-flex cursor-pointer items-center justify-center border border-gold bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.18em] text-paper transition hover:bg-paper hover:text-gold">
+                {qrBusy ? "Saving" : "Upload QR"}
+                <input
+                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  className="hidden"
+                  disabled={qrBusy}
+                  onChange={handleQrUpload}
+                  type="file"
+                />
+              </label>
+            </div>
+            <div className="mt-6 flex flex-col gap-5 sm:flex-row sm:items-start">
+              {qrUrl ? (
+                <img alt="Current GCash payment QR code" className="h-48 w-48 border border-line bg-paper object-contain p-2" src={qrUrl} />
+              ) : (
+                <div className="grid h-48 w-48 place-items-center border border-dashed border-line bg-paper p-5 text-center text-sm text-muted">
+                  No QR code uploaded
+                </div>
+              )}
+              <div className="text-sm text-muted">
+                <p>Supported files: JPEG, PNG, WebP, or GIF up to 5MB.</p>
+                {qrUrl ? (
+                  <button
+                    className="focus-ring mt-5 border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] transition hover:border-red-300 hover:text-red-700"
+                    disabled={qrBusy}
+                    onClick={handleQrDelete}
+                    type="button"
+                  >
+                    Delete QR code
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            {qrMessage ? <p className="mt-5 border border-gold bg-paper px-4 py-3 text-sm text-ink">{qrMessage}</p> : null}
+            {qrError ? <p className="mt-5 border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{qrError}</p> : null}
+          </section>
 
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             <div className="border border-line bg-ivory p-6">

@@ -193,6 +193,45 @@ export async function uploadProductImage(file, token) {
   return response.json();
 }
 
+export function getPaymentQr() {
+  return request("/payment-qr");
+}
+
+export async function uploadPaymentQr(file, token) {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!apiUrl) {
+    throw new Error("NEXT_PUBLIC_API_URL is not configured.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch(`${apiUrl.replace(/\/$/, "")}/admin/payment-qr`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`
+    },
+    body: formData,
+    cache: "no-store"
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(formatApiDetail(data?.detail) || "Unable to upload the payment QR code.");
+    error.status = response.status;
+    error.details = data;
+    throw error;
+  }
+
+  return data;
+}
+
+export async function deletePaymentQr(token) {
+  return request("/admin/payment-qr", {
+    method: "DELETE",
+    token
+  });
+}
+
 export function listUsers(token) {
   return request("/users", { token });
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Search, ShoppingBag, UserRound } from "lucide-react";
 import { useStore } from "@/context/StoreContext";
@@ -10,6 +11,46 @@ export function Header() {
   const router = useRouter();
   const { auth, cartItems, signOut } = useStore();
   const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0);
+  const cartRef = useRef(null);
+  const [flyAnimations, setFlyAnimations] = useState([]);
+  const [badgeBump, setBadgeBump] = useState(0);
+
+  useEffect(() => {
+    function handleCartAnimation(event) {
+      const source = event.detail?.source;
+      const target = cartRef.current?.getBoundingClientRect();
+      if (!source || !target) {
+        return;
+      }
+
+      const id = `${Date.now()}-${Math.random()}`;
+      const sourceSize = Math.min(Math.max(source.width, 48), 150);
+      const sourceCenterX = source.left + source.width / 2;
+      const sourceCenterY = source.top + source.height / 2;
+      const targetCenterX = target.left + target.width / 2;
+      const targetCenterY = target.top + target.height / 2;
+
+      setFlyAnimations((current) => [
+        ...current,
+        {
+          id,
+          src: event.detail.image,
+          left: sourceCenterX - sourceSize / 2,
+          top: sourceCenterY - sourceSize / 2,
+          size: sourceSize,
+          dx: targetCenterX - sourceCenterX,
+          dy: targetCenterY - sourceCenterY
+        }
+      ]);
+      setBadgeBump((current) => current + 1);
+      window.setTimeout(() => {
+        setFlyAnimations((current) => current.filter((animation) => animation.id !== id));
+      }, 760);
+    }
+
+    window.addEventListener("elega:cart-fly", handleCartAnimation);
+    return () => window.removeEventListener("elega:cart-fly", handleCartAnimation);
+  }, []);
 
   if (pathname?.startsWith("/admin") || pathname?.startsWith("/staff")) {
     return null;
@@ -75,14 +116,36 @@ export function Header() {
             aria-label="Open cart"
             className="focus-ring relative rounded-full border border-line p-2 text-ink transition hover:border-gold hover:text-gold"
             href="/cart"
+            ref={cartRef}
           >
             <ShoppingBag size={18} />
-            <span className="absolute -right-2 -top-2 grid h-5 min-w-5 place-items-center rounded-full border border-paper bg-ink px-1 text-[10px] font-semibold text-paper">
+            <span
+              className="absolute -right-2 -top-2 grid h-5 min-w-5 place-items-center rounded-full border border-paper bg-ink px-1 text-[10px] font-semibold text-paper"
+              key={badgeBump}
+              style={{ animation: badgeBump ? "cartBadgeBump 700ms ease-out" : "none" }}
+            >
               {itemCount}
             </span>
           </Link>
         </div>
       </div>
+      {flyAnimations.map((animation) => (
+        <img
+          alt=""
+          aria-hidden="true"
+          className="cart-fly-image"
+          key={animation.id}
+          src={animation.src}
+          style={{
+            "--cart-fly-dx": `${animation.dx}px`,
+            "--cart-fly-dy": `${animation.dy}px`,
+            height: animation.size,
+            left: animation.left,
+            top: animation.top,
+            width: animation.size
+          }}
+        />
+      ))}
     </header>
   );
 }

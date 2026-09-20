@@ -3,7 +3,6 @@ import "./globals.css";
 import { StoreProvider } from "@/context/StoreContext";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
-import { BackendStatus } from "@/components/BackendStatus"; // TEMP: Remove before production
 import { StoreToast } from "@/components/StoreToast";
 
 const display = Cormorant_Garamond({
@@ -33,7 +32,6 @@ export default function RootLayout({ children }) {
           <Footer />
           <StoreToast />
         </StoreProvider>
-        <BackendStatus /> {/* TEMP: Remove before production */}
       </body>
     </html>
   );

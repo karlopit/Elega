@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal
 from uuid import UUID
 
@@ -6,12 +7,13 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from core.audit import record_user_transaction
-from db.database import get_supabase_admin_client, get_supabase_client
+from db.database import get_supabase_admin_client
 from models.schemas import OrderCreateRequest, OrderResponse, OrderStatus
 from core.security import ensure_user_access, require_authenticated_user
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 limiter = Limiter(key_func=get_remote_address)
+logger = logging.getLogger(__name__)
 
 
 @router.get("/{user_id}", response_model=list[OrderResponse])
@@ -23,7 +25,10 @@ async def list_orders(
 ) -> list[OrderResponse]:
     """Return a customer's orders ordered from newest to oldest."""
     ensure_user_access(str(user_id), authenticated_user_id)
-    supabase = get_supabase_client()
+    # The token is validated and ownership is checked above. The anon client
+    # does not forward that token to PostgREST, so it would return no rows when
+    # RLS is enabled.
+    supabase = get_supabase_admin_client()
     response = (
         supabase.table("orders")
         .select("*")
@@ -129,5 +134,15 @@ async def create_order(
             product["name"],
             item.quantity,
         )
+
+    try:
+        supabase.table("cart_items").delete().eq("user_id", str(payload.user_id)).in_(
+            "product_id", product_ids
+        ).execute()
+    except Exception:
+        # The order and stock updates are already committed at this point. Keep
+        # the successful order response, but leave a server-side trail for an
+        # operator to repair cart cleanup if the storage service rejects it.
+        logger.exception("Failed to clear cart after order %s", order["id"])
 
     return order

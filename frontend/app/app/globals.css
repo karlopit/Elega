@@ -72,8 +72,47 @@ img {
   animation-play-state: paused;
 }
 
+.cart-fly-image {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  object-fit: cover;
+  border: 1px solid var(--color-gold);
+  box-shadow: 0 10px 30px rgb(26 26 26 / 18%);
+  transform-origin: center;
+  animation: cartFly 720ms cubic-bezier(0.2, 0.75, 0.25, 1) forwards;
+}
+
+@keyframes cartFly {
+  0% {
+    opacity: 0.95;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  45% {
+    opacity: 0.95;
+    transform: translate3d(calc(var(--cart-fly-dx) * 0.45), calc(var(--cart-fly-dy) * 0.45 - 80px), 0) scale(0.68) rotate(-8deg);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--cart-fly-dx), var(--cart-fly-dy), 0) scale(0.12) rotate(16deg);
+  }
+}
+
+@keyframes cartBadgeBump {
+  0%, 100% {
+    transform: scale(1);
+  }
+  45% {
+    transform: scale(1.28);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .marquee-track {
     animation: none;
+  }
+
+  .cart-fly-image {
+    animation-duration: 1ms;
   }
 }

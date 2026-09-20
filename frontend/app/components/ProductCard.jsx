@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ShoppingBag } from "lucide-react";
 import { CheckoutModal } from "@/components/CheckoutModal";
 import { useStore } from "@/context/StoreContext";
@@ -10,12 +10,28 @@ import { formatMoney } from "@/lib/format";
 export function ProductCard({ product }) {
   const { addToCart } = useStore();
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const imageContainerRef = useRef(null);
   const image = product.image_url || "/product-placeholder.svg";
+
+  function handleAddToCart() {
+    const source = imageContainerRef.current?.getBoundingClientRect();
+    if (source && typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("elega:cart-fly", {
+          detail: { image, source }
+        })
+      );
+    }
+
+    addToCart(product).catch((error) => {
+      console.error(error);
+    });
+  }
 
   return (
     <>
       <article className="group">
-        <div className="relative aspect-[4/5] overflow-hidden bg-ivory">
+        <div className="relative aspect-[4/5] overflow-hidden bg-ivory" ref={imageContainerRef}>
           <Image
             alt={product.name}
             className="object-cover transition duration-700 group-hover:scale-[1.035]"
@@ -46,7 +62,7 @@ export function ProductCard({ product }) {
           </button>
           <button
             className="focus-ring inline-flex items-center justify-center gap-2 border border-line px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-ink transition hover:border-gold hover:text-gold"
-            onClick={() => addToCart(product)}
+            onClick={handleAddToCart}
             type="button"
           >
             <ShoppingBag size={15} />

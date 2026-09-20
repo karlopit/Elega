@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
-from db.database import get_supabase_admin_client, get_supabase_client
+from db.database import get_supabase_admin_client
 from models.schemas import CartItemRequest, CartItemResponse, CartResponse
 from core.security import ensure_user_access, require_authenticated_user
 
@@ -21,7 +21,10 @@ async def get_cart(
 ) -> CartResponse:
     """Return all cart items for a customer."""
     ensure_user_access(str(user_id), authenticated_user_id)
-    supabase = get_supabase_client()
+    # The request token is validated above, but the anon client does not carry
+    # that token into PostgREST queries. Use the service client after the
+    # user-access check so RLS cannot turn a real cart into an empty response.
+    supabase = get_supabase_admin_client()
     response = (
         supabase.table("cart_items")
         .select("*")

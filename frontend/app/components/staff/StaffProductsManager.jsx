@@ -91,7 +91,7 @@ export function StaffProductsManager({ section }) {
       setForm((current) => ({ ...current, image_url: result.image_url }));
     } catch (err) {
       console.error(err);
-      setError("Image upload failed.");
+      setError(getApiErrorMessage(err, "Image upload failed."));
     } finally {
       setUploading(false);
     }

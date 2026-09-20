@@ -29,27 +29,6 @@ async def list_products(request: Request, include_inactive: bool = False) -> lis
     return response.data
 
 
-@router.get("/{product_id}", response_model=ProductResponse)
-@limiter.limit("30/minute")
-async def get_product(request: Request, product_id: UUID, include_inactive: bool = False) -> ProductResponse:
-    """Return one product by its identifier (optionally including inactive ones)."""
-    supabase = get_supabase_client()
-    query = supabase.table("products").select("*").eq("id", str(product_id))
-
-    if not include_inactive:
-        query = query.eq("is_active", True)
-
-    response = query.limit(1).execute()
-
-    if not response.data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Product not found.",
-        )
-
-    return response.data[0]
-
-
 @router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit("10/minute")
 async def create_product(
@@ -144,39 +123,57 @@ async def upload_product_image(
     staff_user_id: str = Depends(require_staff_or_admin_user),
 ) -> dict:
     """Upload an image to Supabase Storage and return its public URL."""
-    if not file.content_type.startswith("image/"):
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only image files are allowed.",
+            detail="Only JPEG, PNG, WebP, or GIF image files are allowed.",
         )
 
-    # 5MB size limit
-    MAX_SIZE = 5 * 1024 * 1024
-    content = await file.read()
-    if len(content) > MAX_SIZE:
+    max_size = 5 * 1024 * 1024
+    content = await file.read(max_size + 1)
+    if len(content) > max_size:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File size exceeds the 5MB limit.",
         )
 
-    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else "jpg"
     filename = f"{uuid4()}.{ext}"
 
     supabase = get_supabase_admin_client()
     try:
-        # Upload to Supabase bucket 'product-images'
         supabase.storage.from_("product-images").upload(
             path=filename,
             file=content,
-            file_options={"content-type": file.content_type}
+            file_options={"content-type": file.content_type},
         )
-
         public_url = supabase.storage.from_("product-images").get_public_url(filename)
         return {"image_url": public_url}
-
     except Exception as exc:
-        logger.exception("Failed to upload image to Supabase Storage")
+        logger.exception("Failed to upload product image to Supabase Storage")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload image to storage. Please ensure 'product-images' bucket is created and public in Supabase.",
+            detail="Product image storage is unavailable. Check that the 'product-images' bucket exists and is public.",
         ) from exc
+
+
+@router.get("/{product_id}", response_model=ProductResponse)
+@limiter.limit("30/minute")
+async def get_product(request: Request, product_id: UUID, include_inactive: bool = False) -> ProductResponse:
+    """Return one product by its identifier (optionally including inactive ones)."""
+    supabase = get_supabase_client()
+    query = supabase.table("products").select("*").eq("id", str(product_id))
+
+    if not include_inactive:
+        query = query.eq("is_active", True)
+
+    response = query.limit(1).execute()
+
+    if not response.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found.",
+        )
+
+    return response.data[0]
