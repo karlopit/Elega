@@ -1,5 +1,6 @@
 import logging
 from decimal import Decimal
+from typing import NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -14,6 +15,15 @@ from core.security import ensure_user_access, require_authenticated_user
 router = APIRouter(prefix="/orders", tags=["orders"])
 limiter = Limiter(key_func=get_remote_address)
 logger = logging.getLogger(__name__)
+
+
+def _raise_order_database_error(stage: str, error: Exception) -> NoReturn:
+    """Log the database failure and return a safe checkout error to the client."""
+    logger.exception("Order creation failed during %s", stage)
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="The store could not complete your order right now. Please try again.",
+    ) from None
 
 
 @router.get("/{user_id}", response_model=list[OrderResponse])
@@ -50,12 +60,15 @@ async def create_order(
     ensure_user_access(str(payload.user_id), authenticated_user_id)
     supabase = get_supabase_admin_client()
     product_ids = [str(item.product_id) for item in payload.items]
-    products_response = (
-        supabase.table("products")
-        .select("id,name,price,currency,stock_quantity,is_active")
-        .in_("id", product_ids)
-        .execute()
-    )
+    try:
+        products_response = (
+            supabase.table("products")
+            .select("id,name,price,currency,stock_quantity,is_active")
+            .in_("id", product_ids)
+            .execute()
+        )
+    except Exception as error:
+        _raise_order_database_error("loading products", error)
     products = {product["id"]: product for product in products_response.data}
 
     if len(products) != len(product_ids):
@@ -106,7 +119,10 @@ async def create_order(
     if payload.latitude is not None and payload.longitude is not None:
         order_payload.update({"latitude": payload.latitude, "longitude": payload.longitude})
 
-    order_response = supabase.table("orders").insert(order_payload).execute()
+    try:
+        order_response = supabase.table("orders").insert(order_payload).execute()
+    except Exception as error:
+        _raise_order_database_error("creating the order", error)
 
     if not order_response.data:
         raise HTTPException(
@@ -119,13 +135,19 @@ async def create_order(
         {"order_id": order["id"], **order_item}
         for order_item in order_items
     ]
-    supabase.table("order_items").insert(order_item_rows).execute()
+    try:
+        supabase.table("order_items").insert(order_item_rows).execute()
+    except Exception as error:
+        _raise_order_database_error("saving order items", error)
 
     for item in payload.items:
         product = products[str(item.product_id)]
-        supabase.table("products").update(
-            {"stock_quantity": product["stock_quantity"] - item.quantity}
-        ).eq("id", str(item.product_id)).execute()
+        try:
+            supabase.table("products").update(
+                {"stock_quantity": product["stock_quantity"] - item.quantity}
+            ).eq("id", str(item.product_id)).execute()
+        except Exception as error:
+            _raise_order_database_error("updating product stock", error)
         record_user_transaction(
             payload.user_id,
             item.product_id,
