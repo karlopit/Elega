@@ -1,0 +1,6 @@
+pytest
+python-dotenv
+requests
+selenium
+pytest-html
+pytest-xdist
